@@ -6,39 +6,66 @@ import random
 st.set_page_config(page_title="Ruth’s Wizard", layout="centered")
 
 st.title("🧙 Ruth’s Wizard")
-st.caption("Educational Mines probability visualizer")
+st.caption("Educational Mines probability simulator")
 
-# Sidebar controls
+st.warning(
+    "Educational tool only.\n"
+    "This does NOT predict real gambling outcomes.",
+    icon="⚠️"
+)
+
+# Sidebar
 st.sidebar.header("Game Settings")
-rows = st.sidebar.slider("Rows", 5, 10, 8)
-cols = st.sidebar.slider("Columns", 5, 10, 8)
-mines = st.sidebar.slider("Mines", 1, rows * cols - 1, 10)
-simulations = st.sidebar.slider("Simulations", 100, 2000, 500)
+ROWS = st.sidebar.slider("Rows", 5, 10, 8)
+COLS = st.sidebar.slider("Columns", 5, 10, 8)
+MINES = st.sidebar.slider("Mines", 1, ROWS * COLS - 1, 10)
+SIMS = st.sidebar.slider("Simulations", 100, 3000, 1000)
 
-st.sidebar.markdown("---")
-st.sidebar.info("This tool is for **educational purposes only**.\n\nIt does NOT predict real game outcomes.")
+# Initialize state
+if "revealed" not in st.session_state:
+    st.session_state.revealed = set()
 
-def generate_heatmap(rows, cols, mines, simulations):
-    mine_counts = np.zeros((rows, cols))
+def generate_probabilities(rows, cols, mines, sims):
+    counts = np.zeros((rows, cols))
+    cells = [(r, c) for r in range(rows) for c in range(cols)]
 
-    for _ in range(simulations):
-        cells = [(r, c) for r in range(rows) for c in range(cols)]
-        mine_positions = random.sample(cells, mines)
+    for _ in range(sims):
+        mine_cells = random.sample(cells, mines)
+        for r, c in mine_cells:
+            counts[r, c] += 1
 
-        for r, c in mine_positions:
-            mine_counts[r, c] += 1
-
-    return mine_counts / simulations
+    return counts / sims
 
 if st.button("✨ Generate Instant Probability Map"):
-    heatmap = generate_heatmap(rows, cols, mines, simulations)
+    st.session_state.probs = generate_probabilities(ROWS, COLS, MINES, SIMS)
+    st.session_state.revealed = set()
+
+# Show heatmap
+if "probs" in st.session_state:
+    probs = st.session_state.probs
 
     fig, ax = plt.subplots(figsize=(6, 6))
-    im = ax.imshow(heatmap, cmap="coolwarm")
+    im = ax.imshow(probs, cmap="coolwarm")
     plt.colorbar(im, ax=ax, label="Mine Probability")
-    ax.set_title("Ruth’s Wizard — Instant Probability Map")
+    ax.set_title("Probability Heatmap")
 
     st.pyplot(fig)
 
-    safest = np.unravel_index(np.argmin(heatmap), heatmap.shape)
-    st.success(f"Safest cell (lowest probability): Row {safest[0]}, Column {safest[1]}")
+    safest = np.unravel_index(np.argmin(probs), probs.shape)
+    st.success(f"Safest cell: Row {safest[0]}, Column {safest[1]}")
+
+    st.markdown("### 🎯 Clickable Board (Simulation)")
+    for r in range(ROWS):
+        cols_ui = st.columns(COLS)
+        for c in range(COLS):
+            key = f"{r}-{c}"
+            if (r, c) in st.session_state.revealed:
+                cols_ui[c].button(
+                    f"{probs[r, c]:.2f}",
+                    key=key,
+                    disabled=True
+                )
+            else:
+                if cols_ui[c].button("?", key=key):
+                    st.session_state.revealed.add((r, c))
+                    st.rerun()
